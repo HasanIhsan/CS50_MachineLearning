@@ -104,14 +104,16 @@ class Sentence():
     def known_mines(self):
         """
         Returns the set of all cells in self.cells known to be mines.
+        If the count equals the number of cells, every cell is a mine.
         """
         if len(self.cells) == self.count and self.count != 0:
             return set(self.cells)
         return set()
-    
+
     def known_safes(self):
         """
         Returns the set of all cells in self.cells known to be safe.
+        If the count is 0, every cell must be safe.
         """
         if self.count == 0:
             return set(self.cells)
@@ -189,46 +191,45 @@ class MinesweeperAI():
             5) add any new sentences to the AI's knowledge base
                if they can be inferred from existing knowledge
         """
-        
-        #1) and 2)
+
+        # 1) Mark the cell as a move made and 2) mark it as safe.
         self.moves_made.add(cell)
         self.mark_safe(cell)
-        
-        
-        
-        #3) determine
+
+        # 3) Determine the neighboring cells that are neither known safe nor known mines.
         i, j = cell
         neighbors = set()
         for ni in range(i - 1, i + 2):
             for nj in range(j - 1, j + 2):
                 if (ni, nj) == cell:
                     continue
-            if 0 <= ni < self.height and 0 <= nj < self.width:
-                if(ni, nj) in self.safes or (ni, nj) in self.mines:
-                    continue
-                neighbors.add((ni, nj))
-                
-        # adjust count by sub mines around cell
-        # might be adjacents
-        for neighbor in [(ni, nj) for ni in range(i - 1, i + 2)
-                         for nj in range(j - 1, j + 2)
-                         if (ni, nj) != cell]:
-            if neighbor in self.mines:
-                count -= 1
+                if 0 <= ni < self.height and 0 <= nj < self.width:
+                    if (ni, nj) in self.safes or (ni, nj) in self.mines:
+                        continue
+                    neighbors.add((ni, nj))
 
-        #  Only add the sentence if there are cells whose state is undetermined.
+        # Adjust count by subtracting the known mines among neighbors.
+        for ni in range(i - 1, i + 2):
+            for nj in range(j - 1, j + 2):
+                if (ni, nj) == cell:
+                    continue
+                if 0 <= ni < self.height and 0 <= nj < self.width:
+                    if (ni, nj) in self.mines:
+                        count -= 1
+
+        # Only add a sentence if there are undetermined neighbor cells.
         if len(neighbors) > 0:
             new_sentence = Sentence(neighbors, count)
             self.knowledge.append(new_sentence)
 
-        # 4) Keep inferring new safe cells or mines until no more can be found.
+        # 4) Repeatedly update the knowledge base with new inferences until no more can be made.
         updated = True
         while updated:
             updated = False
             safes_to_add = set()
             mines_to_add = set()
 
-            # Check each sentence for definite safe or mine cells.
+            # Determine any cells that are safe or mines.
             for sentence in self.knowledge:
                 safes_found = sentence.known_safes()
                 mines_found = sentence.known_mines()
@@ -237,19 +238,21 @@ class MinesweeperAI():
                 if mines_found:
                     mines_to_add |= mines_found
 
+            # Mark any new safe cells.
             if safes_to_add:
                 for safe in safes_to_add:
                     if safe not in self.safes:
                         self.mark_safe(safe)
                         updated = True
 
+            # Mark any new mines.
             if mines_to_add:
                 for mine in mines_to_add:
                     if mine not in self.mines:
                         self.mark_mine(mine)
                         updated = True
 
-            # 5) Infer new sentences from existing ones
+            # 5) Infer new sentences from existing ones.
             new_sentences = []
             for sentence1 in self.knowledge:
                 for sentence2 in self.knowledge:
@@ -260,31 +263,25 @@ class MinesweeperAI():
                         new_cells = sentence2.cells - sentence1.cells
                         new_count = sentence2.count - sentence1.count
                         new_sentence = Sentence(new_cells, new_count)
-                        # Only add if it is new and non-empty
                         if new_sentence not in self.knowledge and new_sentence not in new_sentences and len(new_sentence.cells) > 0:
                             new_sentences.append(new_sentence)
             if new_sentences:
                 self.knowledge.extend(new_sentences)
                 updated = True
 
-        # Remove any empty sentences (optional clean-up)
+        # Optional clean-up: Remove any empty sentences.
         self.knowledge = [s for s in self.knowledge if s.cells]
-            
 
     def make_safe_move(self):
         """
         Returns a safe cell to choose on the Minesweeper board.
         The move must be known to be safe, and not already a move
         that has been made.
-
-        This function may use the knowledge in self.mines, self.safes
-        and self.moves_made, but should not modify any of those values.
         """
         for cell in self.safes:
             if cell not in self.moves_made:
-               return cell
-        return None 
-    
+                return cell
+        return None
 
     def make_random_move(self):
         """
@@ -293,9 +290,8 @@ class MinesweeperAI():
             1) have not already been chosen, and
             2) are not known to be mines
         """
-        all_moves = set((i, j) for i in range(self.height) for j in range(self.width))
-        
-        # Exclude moves already made and known mines
+        all_moves = {(i, j) for i in range(self.height) for j in range(self.width)}
+        # Exclude moves already made and known mines.
         choices = list(all_moves - self.moves_made - self.mines)
         if choices:
             return random.choice(choices)
